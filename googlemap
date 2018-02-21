@@ -1,0 +1,823 @@
+package com.example.janice.myapplication_test;
+
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.ProgressDialog;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothSocket;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.graphics.Color;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
+import android.location.Location;
+import android.os.AsyncTask;
+import android.os.Build;
+import android.os.Bundle;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.app.FragmentActivity;
+import android.util.Log;
+import android.widget.Toast;
+
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.maps.CameraUpdateFactory;
+import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
+import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.PolylineOptions;
+
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.UUID;
+
+public class MapsActivity extends FragmentActivity implements OnMapReadyCallback ,GoogleApiClient.ConnectionCallbacks,
+        GoogleApiClient.OnConnectionFailedListener, com.google.android.gms.location.LocationListener, SensorEventListener {
+
+    private GoogleMap mMap;
+    ArrayList<LatLng> MarkerPoints;
+    GoogleApiClient mGoogleApiClient;
+    Location mLastLocation;
+    Marker mCurrLocationMarker, destMarker;
+    LocationRequest mLocationRequest;
+    LatLng myCurrentPlace;
+    double final_lat1;
+    double final_lng1;
+    double final_lat;
+    double final_lng;
+    double final_lat_1;
+    double final_lng_1;
+    double last_lat;
+    double last_lng;
+    double myCurrentPlace_lat;
+    double myCurrentPlace_lng;
+    double output;
+    double dis = 1000;
+    double fin_degree;
+    double subdegree;
+    double turningdegree;
+    double de;
+    int north = 0;
+    double orientation_degree;
+    public static ArrayList<Double> degree_array;
+    public static ArrayList<Double> orientation_array;
+    public static ArrayList<Double> angle_array;
+    public static ArrayList<Double> lat_array;
+    public static ArrayList<Double> lng_array;
+    int a;
+    int T;
+    int turn = 0;
+    Toast msgblue;
+    Toast direction;
+    private SensorManager mSensorManager;
+
+    String address = null;
+    private ProgressDialog progress;
+    BluetoothAdapter myBluetooth = null;
+    BluetoothSocket btSocket = null;
+    private boolean isBtConnected = false;
+    //public static final UUID myUUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
+    public static final UUID myUUID = UUID.fromString("94f39d29-7d6d-437d-973b-fba39e49d4ee"); //Standard SerialPortService ID
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_maps);
+        // Obtain the SupportMapFragment and get notified when the map is ready to be used.
+        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
+                .findFragmentById(R.id.map);
+        mapFragment.getMapAsync(this);
+
+        // Initializing
+        mSensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+        MarkerPoints = new ArrayList<>();
+        lat_array = new ArrayList<Double>();
+        lng_array = new ArrayList<Double>();
+        angle_array = new ArrayList<Double>();
+        degree_array = new ArrayList<Double>();
+        orientation_array = new ArrayList<Double>();
+        a = 0;
+
+        Intent intent = this.getIntent();
+        address = intent.getStringExtra(MainActivity.EXTRA_ADDRESS);
+        new ConnectBT().execute();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        // for the system's orientation sensor registered listeners
+        mSensorManager.registerListener(this, mSensorManager.getDefaultSensor(Sensor.TYPE_ORIENTATION),
+                SensorManager.SENSOR_DELAY_GAME);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+
+        // to stop the listener and save battery
+        mSensorManager.unregisterListener(this);
+    }
+
+
+    /**
+     * Manipulates the map once available.
+     * This callback is triggered when the map is ready to be used.
+     * This is where we can add markers or lines, add listeners or move the camera. In this case,
+     * we just add a marker near Sydney, Australia.
+     * If Google Play services is not installed on the device, the user will be prompted to install
+     * it inside the SupportMapFragment. This method will only be triggered once the user has
+     * installed Google Play services and returned to the app.
+     */
+    @Override
+    public void onMapReady(GoogleMap googleMap) {
+        mMap = googleMap;
+
+        // Add a marker in Sydney and move the camera
+        LatLng sydney = new LatLng(24, 121);
+        mMap.moveCamera(CameraUpdateFactory.newLatLng(sydney));
+
+        //Initialize Google Play Services
+        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+
+            buildGoogleApiClient();
+            if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                // TODO: Consider calling
+                //    ActivityCompat#requestPermissions
+                // here to request the missing permissions, and then overriding
+                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                //                                          int[] grantResults)
+                // to handle the case where the user grants the permission. See the documentation
+                // for ActivityCompat#requestPermissions for more details.
+                return;
+            }
+            mMap.setMyLocationEnabled(true);
+
+        } else {
+            buildGoogleApiClient();
+            mMap.setMyLocationEnabled(true);
+        }
+
+        // Setting onclick event listener for the map
+        mMap.setOnMapClickListener(new GoogleMap.OnMapClickListener() {
+
+            @Override
+            public void onMapClick(LatLng point) {
+                // Already two locations
+                if (MarkerPoints.size() == 1) {
+                    MarkerPoints.clear();
+                    mMap.clear();
+                }
+
+                // Adding new item to the ArrayList
+                MarkerPoints.add(point);
+
+                // Creating MarkerOptions
+                MarkerOptions options = new MarkerOptions();
+
+                // Setting the position of the marker
+                options.position(point);
+
+                /**
+                 * For the start location, the color of marker is GREEN and
+                 * for the end location, the color of marker is RED.
+                 */
+                options.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN));
+
+                // Add new marker to the Google Map Android API V2
+                destMarker = mMap.addMarker(options);
+
+                // Checks, whether start and end locations are captured
+                if (MarkerPoints.size() >= 1) {
+                    LatLng origin = myCurrentPlace;
+                    LatLng dest = MarkerPoints.get(0);
+
+                    // Getting URL to the Google Directions API
+                    String url = getUrl(origin, dest);
+                    FetchUrl FetchUrl = new FetchUrl();
+
+                    // Start downloading json data from Google Directions API
+                    FetchUrl.execute(url);
+                    //move map camera
+                    mMap.moveCamera(CameraUpdateFactory.newLatLng(origin));
+                    mMap.animateCamera(CameraUpdateFactory.zoomTo(17));
+                }
+
+            }
+        });
+    }
+
+    private String getUrl(LatLng origin, LatLng dest) {
+
+        // Origin of route
+        String str_origin = "origin=" + origin.latitude + "," + origin.longitude;
+        // Destination of route
+        String str_dest = "destination=" + dest.latitude + "," + dest.longitude;
+        // Sensor enabled
+        String sensor = "sensor=false";
+        String mode = "mode=walking";
+        // Building the parameters to the web service
+        String parameters = str_origin + "&" + str_dest + "&" + mode + "&" + sensor;
+        // Output format
+        String output = "json";
+        // Building the url to the web service
+        String url = "https://maps.googleapis.com/maps/api/directions/" + output + "?" + parameters;
+
+        return url;
+    }
+
+    /**
+     * A method to download json data from url
+     */
+    private String downloadUrl(String strUrl) throws IOException {
+        String data = "";
+        InputStream iStream = null;
+        HttpURLConnection urlConnection = null;
+        try {
+            URL url = new URL(strUrl);
+
+            // Creating an http connection to communicate with url
+            urlConnection = (HttpURLConnection) url.openConnection();
+
+            // Connecting to url
+            urlConnection.connect();
+
+            // Reading data from url
+            iStream = urlConnection.getInputStream();
+
+            BufferedReader br = new BufferedReader(new InputStreamReader(iStream));
+
+            StringBuffer sb = new StringBuffer();
+
+            String line = "";
+            while ((line = br.readLine()) != null) {
+                sb.append(line);
+            }
+
+            data = sb.toString();
+            Log.d("downloadUrl", data.toString());
+            br.close();
+
+        } catch (Exception e) {
+            Log.d("Exception", e.toString());
+        } finally {
+            iStream.close();
+            urlConnection.disconnect();
+        }
+        return data;
+    }
+
+    // Fetches data from url passed
+    private class FetchUrl extends AsyncTask<String, Void, String> {
+
+        @Override
+        protected String doInBackground(String... url) {
+
+            // For storing data from web service
+            String data = "";
+
+            try {
+                // Fetching the data from web service
+                data = downloadUrl(url[0]);
+                Log.d("Background Task data", data.toString());
+            } catch (Exception e) {
+                Log.d("Background Task", e.toString());
+            }
+            return data;
+        }
+
+        @Override
+        protected void onPostExecute(String result) {
+            super.onPostExecute(result);
+
+            ParserTask parserTask = new ParserTask();
+
+            // Invokes the thread for parsing the JSON data
+            parserTask.execute(result);
+
+        }
+    }
+
+    /**
+     * A class to parse the Google Places in JSON format
+     */
+    private class ParserTask extends AsyncTask<String, Integer, List<List<HashMap<String, String>>>> {
+
+        // Parsing the data in non-ui thread
+        @Override
+        protected List<List<HashMap<String, String>>> doInBackground(String... jsonData) {
+
+            JSONObject jObject;
+            List<List<HashMap<String, String>>> routes = null;
+
+
+            try {
+                jObject = new JSONObject(jsonData[0]);
+                Log.d("ParserTask", jsonData[0].toString());
+                DataParser parser = new DataParser();
+                Log.d("ParserTask", parser.toString());
+
+                // Starts parsing data
+                routes = parser.parse(jObject);
+                Log.d("ParserTask", "Executing routes");
+                Log.d("ParserTask", routes.toString());
+
+            } catch (Exception e) {
+                Log.d("ParserTask", e.toString());
+                e.printStackTrace();
+            }
+            return routes;
+        }
+
+        // Executes in UI thread, after the parsing process
+        @Override
+        protected void onPostExecute(List<List<HashMap<String, String>>> result) {
+            ArrayList<LatLng> points;
+            PolylineOptions lineOptions = null;
+
+            ArrayList<String> html_str_array_la;
+            ArrayList<String> html_str_array_ln;
+            ArrayList<String> html_str_array;
+
+
+
+            // Traversing through all the routes
+            for (int i = 0; i < result.size(); i++) {
+
+                if (i == 0) {
+                    points = new ArrayList<>();
+                    lineOptions = new PolylineOptions();
+
+                    // Fetching i-th route
+                    List<HashMap<String, String>> path = result.get(i);
+
+                    // Fetching all the points in i-th route
+                    for (int j = 0; j < path.size(); j++) {
+                        HashMap<String, String> point = path.get(j);
+
+                        double lat = Double.parseDouble(point.get("lat"));
+                        double lng = Double.parseDouble(point.get("lng"));
+                        LatLng position = new LatLng(lat, lng);
+
+                        points.add(position);
+                    }
+                    // Adding all the points in the route to LineOptions
+                    lineOptions.addAll(points);
+                    lineOptions.width(10);
+                    lineOptions.color(Color.RED);
+                }
+                /** 處理end_location文字 */
+                if (i == 1) {
+                    html_str_array_la = new ArrayList<String>();
+                    html_str_array_ln = new ArrayList<String>();
+                    html_str_array = new ArrayList<String>();
+
+
+
+                    List<HashMap<String, String>> html_list = result.get(i);
+                    System.out.println(" main_html.toString():"
+                            + html_list.toString());
+
+                    for (int k = 0; k < html_list.size(); k++) {
+                        HashMap<String, String> html_map = html_list.get(k);
+                        String html_str_la = html_map.get("html_str_la");
+                        html_str_array_la.add(html_str_la);
+                        html_str_array.add(html_str_la);
+                        String html_str_ln = html_map.get("html_str_ln");
+                        html_str_array_ln.add(html_str_ln);
+                        html_str_array.add(html_str_ln);
+
+                        if (k == 0) {
+                            final_lat1 = Double.parseDouble(html_str_array_la.get(0));
+                            lat_array.add(final_lat1);
+
+                            final_lng1 = Double.parseDouble(html_str_array_ln.get(0));
+                            lng_array.add(final_lng1);
+                            angle_array.add(gps2d(myCurrentPlace_lat, myCurrentPlace_lng, final_lat1, final_lng1));
+
+                        } else {
+                            final_lat = Double.parseDouble(html_str_array_la.get(k));
+                            lat_array.add(final_lat);
+                            final_lng = Double.parseDouble(html_str_array_ln.get(k));
+                            lng_array.add(final_lng);
+                            last_lat = Double.parseDouble(html_str_array_la.get(k - 1));
+                            last_lng = Double.parseDouble(html_str_array_ln.get(k - 1));
+                            angle_array.add(gps2d(last_lat, last_lng, final_lat, final_lng));
+                        }
+                    }
+
+                    final ArrayList<String> finalHtml_str_array = html_str_array;
+                    mMap.setOnMarkerClickListener(new GoogleMap.OnMarkerClickListener() {
+                        @Override
+                        public boolean onMarkerClick(Marker marker) {
+                            if (marker.equals(destMarker)) {
+                                AlertDialog.Builder ab = new AlertDialog.Builder(MapsActivity.this);
+
+                                ab.setTitle(R.string.getLatLng)
+                                        .setMessage(R.string.wantGetLatLng)
+                                        .setCancelable(true);
+
+                                ab.setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+                                    @Override
+                                    public void onClick(DialogInterface dialog, int which) {
+                                        Intent page2 = new Intent();
+                                        page2.setClass(MapsActivity.this, Main2Activity.class);
+                                        page2.putExtra("getLatLng", orientation_array);
+                                        setResult(Activity.RESULT_OK, page2);
+                                        startActivity(page2);
+                                        try {
+                                            btSocket.close();
+                                        } catch (IOException e) {
+                                            e.printStackTrace();
+                                        }
+                                    }
+                                });
+                                ab.setNegativeButton(android.R.string.cancel, null);
+                                ab.show();
+                                return true;
+                            }
+                            return false;
+                        }
+                    });
+                }
+                Log.d("onPostExecute", "onPostExecute lineoptions decoded");
+
+            }
+
+            // Drawing polyline in the Google Map for the i-th route
+            if (lineOptions != null) {
+                mMap.addPolyline(lineOptions);
+            } else {
+                Log.d("onPostExecute", "without Polylines drawn");
+            }
+        }
+    }
+
+
+
+    protected synchronized void buildGoogleApiClient() {
+        mGoogleApiClient = new GoogleApiClient.Builder(this)
+                .addConnectionCallbacks(this)
+                .addOnConnectionFailedListener(this)
+                .addApi(LocationServices.API)
+                .build();
+        mGoogleApiClient.connect();
+    }
+
+
+    @Override
+    public void onConnected(Bundle bundle) {
+
+        mLocationRequest = new LocationRequest();
+        mLocationRequest.setInterval(1000);
+        mLocationRequest.setFastestInterval(1000);
+        mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+
+        if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // TODO: Consider calling
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
+            return;
+        }
+        LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest, this);
+
+    }
+
+    @Override
+    public void onConnectionSuspended(int i) {
+
+    }
+
+    @Override
+    public void onLocationChanged(Location location) {
+
+        mLastLocation = location;
+
+        //Place current location marker
+        myCurrentPlace = new LatLng(location.getLatitude(), location.getLongitude());
+        myCurrentPlace_lat = location.getLatitude();
+        myCurrentPlace_lng = location.getLongitude();
+        if (mCurrLocationMarker == null) {
+            mCurrLocationMarker = mMap.addMarker(new MarkerOptions().position(myCurrentPlace));
+        }
+        else {
+            mCurrLocationMarker.setPosition(myCurrentPlace);
+        }
+
+        if(T == 1){
+            msgblue.cancel();
+            T = 0;
+        }
+
+        //move map camera
+        mMap.moveCamera(CameraUpdateFactory.newLatLng(myCurrentPlace));
+        mMap.animateCamera(CameraUpdateFactory.zoomTo(18));
+
+        if(!angle_array.isEmpty()) {
+            dis = gps2m(myCurrentPlace_lat, myCurrentPlace_lng,lat_array.get(a),lng_array.get(a));
+
+            //String test = String.valueOf(dis);
+            //Toast.makeText(this, test, Toast.LENGTH_SHORT).show();
+
+            if(direction != null){
+                direction.cancel();
+            }
+
+            if((a+1) == angle_array.size() && dis < 10){
+                direction = Toast.makeText(MapsActivity.this, R.string.arrival, Toast.LENGTH_LONG);
+                direction.show();
+                try {
+                    btSocket.getOutputStream().write("4000".toString().getBytes());
+                } catch (IOException e) {
+                    msg("Error");
+                }
+            }
+
+
+            else if((a+1) != angle_array.size() && dis <  12) {
+                turn = 1;
+                turningdegree = angle_array.get(a + 1) - de;
+                if (turningdegree < 0) {
+                    turningdegree = turningdegree + 360;
+                }
+                if (180 < turningdegree && turningdegree < 360) {
+                    turningdegree = turningdegree - 360;
+                }
+                orientation_array.add(turningdegree);
+            }
+
+            if (turn == 1) {
+
+                output = angle_array.get(a + 1) - angle_array.get(a);
+                if (output < 0) {
+                    output = output + 360;
+                }
+
+                if (180 < output && output < 360) {
+                    output = output - 360;
+                }
+
+                //orientation_array.add(output);
+                if (output > 0) {
+                    //String turn_right = Double.toString(1000 + de);
+                    direction = Toast.makeText(MapsActivity.this, "1", Toast.LENGTH_LONG);
+                    direction.show();
+                    try {
+                        btSocket.getOutputStream().write("1".toString().getBytes());
+                    } catch (IOException e) {
+                        msg("Error");
+                    }
+                }
+                if (output < 0) {
+                    //String turn_left = Double.toString(2000 + de);
+                    direction = Toast.makeText(MapsActivity.this, "2", Toast.LENGTH_LONG);
+                    direction.show();
+                    try {
+                        btSocket.getOutputStream().write("2".toString().getBytes());
+                    } catch (IOException e) {
+                        msg("Error");
+                    }
+                }
+            }
+/*
+                if (subdegree > Math.abs(output - 10)) {
+                    a = a + 1;
+                    direction = Toast.makeText(MapsActivity.this, R.string.go_straight, Toast.LENGTH_LONG);
+                    direction.show();
+                    orientation_degree = angle_array.get(a) - de;
+                    if (orientation_degree < 0) {
+                        orientation_degree = orientation_degree + 360;
+                    }
+                    if (180 < orientation_degree && orientation_degree < 360) {
+                        orientation_degree = orientation_degree - 360;
+                    }
+
+                    String straight = Double.toString(orientation_degree);
+                    try {
+                        btSocket.getOutputStream().write(straight.getBytes());
+                    } catch (IOException e) {
+                        msg("Error");
+                    }
+
+                }
+            }
+
+*/
+/*
+            if ((dis > 10) && abs(angle_array.get(a) - de) > 40 ){
+                orientation_degree = angle_array.get(a) - de;
+                if (orientation_degree < 0){
+                    orientation_degree = orientation_degree + 360;
+                }
+                orientation_array.add(orientation_degree);
+                if (0 < orientation_degree && orientation_degree < 181){
+                    String right = Double.toString(orientation_degree);
+                    try {
+                        btSocket.getOutputStream().write(right.getBytes());
+                    } catch (IOException e) {
+                        msg("Error");
+                    }
+                    direction = Toast.makeText(MapsActivity.this, "右迴轉", Toast.LENGTH_SHORT);
+                    direction.show();
+                }
+                if (180 < orientation_degree && orientation_degree < 360){
+                    String left = Double.toString(orientation_degree - 360);
+                    try {
+                        btSocket.getOutputStream().write(left.getBytes());
+                    } catch (IOException e) {
+                        msg("Error");
+                    }
+                    direction = Toast.makeText(MapsActivity.this, "左迴轉", Toast.LENGTH_SHORT);
+                    direction.show();
+                }
+            }
+*/
+
+            if(dis > 12 && turn == 0){
+                orientation_degree = angle_array.get(a) - de;
+                if (orientation_degree < 0){
+                    orientation_degree = orientation_degree + 360;
+                }
+                if (180 < orientation_degree && orientation_degree < 360){
+                    orientation_degree = orientation_degree - 360;
+                }
+                String straight = Double.toString(orientation_degree);
+                try {
+                    btSocket.getOutputStream().write(straight.getBytes());
+                } catch (IOException e) {
+                    msg("Error");
+                }
+                direction = Toast.makeText(MapsActivity.this, straight, Toast.LENGTH_LONG);
+                direction.show();
+            }
+        }
+    }
+
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+
+        // get the angle around the z-axis rotated
+        float degree = Math.round(event.values[0]);
+        de = degree;
+
+        if (dis > 12 && turn == 0) {
+            fin_degree = de;
+        }
+
+        if (turn == 1){
+            //Toast.makeText(this, "0", Toast.LENGTH_SHORT).show();
+            subdegree = fin_degree - de;
+            if (subdegree < 0){
+                subdegree = subdegree + 360;
+            }
+            if (180 < subdegree && subdegree < 360){
+               subdegree = subdegree - 360;
+            }
+            subdegree =Math.abs(subdegree);
+            degree_array.add(subdegree);
+            if (subdegree > Math.abs(turningdegree)+5){
+                dis = 1000;
+                a = a + 1;
+                turn = 0;
+            }
+        }
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {
+
+    }
+
+
+    @Override
+    public void onConnectionFailed(ConnectionResult connectionResult) {
+        // Google Services連線失敗
+        // ConnectionResult參數是連線失敗的資訊
+        int errorCode = connectionResult.getErrorCode();
+
+        // 裝置沒有安裝Google Play服務
+        if (errorCode == ConnectionResult.SERVICE_MISSING) {
+            Toast.makeText(this, R.string.google_play_service_missing,
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
+    //calculate distance
+    private double gps2m(double lat_a, double lng_a, double lat_b, double lng_b) {
+        double radLat1 = (lat_a * Math.PI / 180.0);
+        double radLat2 = (lat_b * Math.PI / 180.0);
+        double a = radLat1 - radLat2;
+        double b = (lng_a - lng_b) * Math.PI / 180.0;
+        double s = 2 * Math.asin(Math.sqrt(Math.pow(Math.sin(a / 2), 2)
+                + Math.cos(radLat1) * Math.cos(radLat2)
+                * Math.pow(Math.sin(b / 2), 2)));
+        double EARTH_RADIUS = 6378137.0;
+        s = s * EARTH_RADIUS;
+        s = Math.round(s * 10000) / 10000;
+        //distance = String.valueOf(s);
+        return s;
+    }
+
+    private double gps2d(double lat_a, double lng_a, double lat_b, double lng_b) {
+        double d = 0;
+
+        lat_a=lat_a*Math.PI/180;
+        lng_a=lng_a*Math.PI/180;
+        lat_b=lat_b*Math.PI/180;
+        lng_b=lng_b*Math.PI/180;
+
+        d = lng_b - lng_a;
+        double y = Math.sin(d) * Math.cos(lat_b);
+        double x= Math.cos(lat_a) * Math.sin(lat_b) - Math.sin(lat_a)
+                * Math.cos(lat_b) * Math.cos(d);
+
+        double brng = Math.atan2(y, x);
+
+        brng = Math.toDegrees(brng);
+        brng = (brng + 360) % 360;
+
+        // String angle = String.valueOf(brng);
+        return  brng;
+    }
+
+    private class ConnectBT extends AsyncTask<Void, Void, Void>  // UI thread
+    {
+        private boolean ConnectSuccess = true; //if it's here, it's almost connected
+
+        @Override
+        protected void onPreExecute()
+        {
+            progress = ProgressDialog.show(MapsActivity.this, "Connecting...", "Please wait!!!");  //show a progress dialog
+        }
+
+        @Override
+        protected Void doInBackground(Void... devices) //while the progress dialog is shown, the connection is done in background
+        {
+            try
+            {
+                if (btSocket == null || !isBtConnected)
+                {
+                    myBluetooth = BluetoothAdapter.getDefaultAdapter();//get the mobile bluetooth device
+                    BluetoothDevice dispositivo = myBluetooth.getRemoteDevice(address);//connects to the device's address and checks if it's available
+                    btSocket = dispositivo.createRfcommSocketToServiceRecord(myUUID);//create a RFCOMM (SPP) connection
+                    BluetoothAdapter.getDefaultAdapter().cancelDiscovery();
+                    btSocket.connect();//start connection
+                }
+            }
+            catch (IOException e)
+            {
+                ConnectSuccess = false;//if the try failed, you can check the exception here
+            }
+            return null;
+        }
+        @Override
+        protected void onPostExecute(Void result) //after the doInBackground, it checks if everything went fine
+        {
+            super.onPostExecute(result);
+
+            if (!ConnectSuccess)
+            {
+                msg("Connection Failed. Is it a SPP Bluetooth? Try again.");
+                finish();
+            }
+            else
+            {
+                msg("Connected.");
+                isBtConnected = true;
+            }
+            progress.dismiss();
+        }
+    }
+
+    private void msg(String s)
+    {
+        T = 1;
+        msgblue = Toast.makeText(getApplicationContext(),s, Toast.LENGTH_LONG);
+        msgblue.show();
+    }
+
+}
